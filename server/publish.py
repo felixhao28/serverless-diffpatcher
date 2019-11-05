@@ -8,6 +8,7 @@ import json
 import shutil
 import errno
 import bsdiff4
+import fnmatch
 from past.builtins import raw_input
 
 if sys.version_info >= (3, 5):
@@ -100,20 +101,36 @@ class Storage:
         with open(self.storage_registry_file, "w", encoding='utf-8') as f:
             f.write(json.dumps(self.storage_registry, indent=2))
 
-    def handle_dir(self, path, base_dir=None):
+    def handle_dir(self, path, base_dir=None, ignore_patterns=None):
         if base_dir is None:
             base_dir = path
+        if ignore_patterns is None:
+            ignore_patterns = []
+        else:
+            ignore_patterns = list(ignore_patterns)
+        try:
+            with open(os.path.join(path, ".aixignore"), "r", encoding="utf-8") as f:
+                ignore_patterns.extend((path, line.strip()) for line in f.readlines())
+        except FileNotFoundError:
+            pass
+
         files = []
         for f in os.listdir(path):
             full_path = os.path.join(path, f)  # type: str
             if os.path.isdir(full_path):
-                files.extend(self.handle_dir(full_path, base_dir))
+                files.extend(self.handle_dir(full_path, base_dir, ignore_patterns=ignore_patterns))
             else:
-                r = self.handle_file(full_path, base_dir)
-                files.append(r)
+                r = self.handle_file(full_path, base_dir, ignore_patterns=ignore_patterns)
+                if r:
+                    files.append(r)
         return files
 
-    def handle_file(self, path, base_dir):
+    def handle_file(self, path, base_dir, ignore_patterns):
+        for relative_folder, ignore_pattern in ignore_patterns:
+            relative_path = os.path.relpath(path, relative_folder)
+            if fnmatch.fnmatch(relative_path, ignore_pattern):
+                return
+
         storage_registry = self.storage_registry
         with open(path, "rb") as f:
             buffer = f.read()
@@ -157,13 +174,14 @@ def parse_args():
     parser.add_argument("source_folder", type=str)
     parser.add_argument("version", nargs='?', default=None, type=str)
     parser.add_argument("--offline", action="store_true", default=False)
+    parser.add_argument("--dry", action="store_true", default=False)
     args = parser.parse_args()
 
     artifact = args.artifact_id
     new_dir = args.source_folder
 
     version = get_version(args.version, new_dir)
-    return artifact, new_dir, version, sys.argv.index("--offline") >= 0
+    return artifact, new_dir, version, args.offline, args.dry
 
 
 def read_aliyunoss_properties(filename):
@@ -184,10 +202,24 @@ def read_aliyunoss_properties(filename):
 def main():
     # 当前制品id > "localserver"
     # 拿到新版本号  > "0.0.3"
-    artifact, new_dir, version, offline = parse_args()
+    artifact, new_dir, version, offline, dry = parse_args()
     # if not query_yes_no("Artifact={}, Version={}, location: {}\nContinue?".format(artifact, version, new_dir)):
     #     sys.exit(-1)
-    if not offline:
+    if dry:
+        def upload(target_path, source):
+            if len(source) < 256 and os.path.exists(source):
+                print("%dry run%: copy {} to {}".format(source, target_path))
+            else:
+                print("%dry run%: write content to {}\n===<START>===\n{}\n===<END>===\n".format(target_path, source))
+    elif offline:
+        def upload(target_path, source):
+            mkdir_p(os.path.dirname(target_path))
+            if len(source) < 256 and os.path.exists(source):
+                shutil.copy(source, target_path)
+            else:
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write(source)
+    else:
         endpoint, keyid, keysecret, bucketname = read_aliyunoss_properties("aliyunoss.properties")
         auth = oss2.Auth(keyid, keysecret)
         bucket = oss2.Bucket(auth, endpoint, bucketname)
@@ -195,16 +227,7 @@ def main():
         def upload(target_path, source):
             bucket.put_object_from_file(target_path, source)
 
-    else:
-        def upload(target_path, source):
-            mkdir_p(os.path.dirname(target_path))
-            if os.path.exists(source):
-                shutil.copy(source, target_path)
-            else:
-                with open(target_path, "w", encoding="utf-8") as f:
-                    f.write(source)
-
-    storage = Storage("storage", "registry.json")
+    storage = Storage("storage-{}".format(artifact), "registry-{}.json".format(artifact))
     for old_version in storage.storage_registry["versions"]:
         if old_version["version"] == version:
             if not query_yes_no("Version {} already exist, override?".format(version)):
@@ -249,7 +272,8 @@ def main():
         "version": version,
         "files": files
     })
-    storage.save()
+    if not dry:
+        storage.save()
 
 
 if __name__ == '__main__':
