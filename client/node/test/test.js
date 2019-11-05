@@ -1,33 +1,38 @@
+/* eslint-disable no-undef */
 const fs = require("fs-extra");
-const { expect } = require('chai');
+const { expect } = require("chai");
 const path = require("path");
-const handler = require('serve-handler');
-const http = require('http');
+const handler = require("serve-handler");
+const http = require("http");
 const portfinder = require("portfinder");
 
 const AixUpdaterClient = require("../AixUpdaterClient");
 
 const localpath = "./test/v1-back";
 
-describe('Online update', function() {
+describe("Online update", function() {
     /** @type {AixUpdaterClient} */
     let updater;
     let server;
     before(async() => {
         const port = await portfinder.getPortPromise();
         await new Promise((resolve, reject) => {
-            server = http.createServer((request, response) => {
-                // You pass two more arguments for config and middleware
-                // More details here: https://github.com/zeit/serve-handler#options
-                return handler(request, response, {
-                    public: "./test"
+            try {
+                server = http.createServer((request, response) => {
+                    // You pass two more arguments for config and middleware
+                    // More details here: https://github.com/zeit/serve-handler#options
+                    return handler(request, response, {
+                        public: "./test"
+                    });
                 });
-            })
 
-            server.listen(port, () => {
-                console.log(`Test web server running at http://localhost:${port}`);
-                resolve();
-            });
+                server.listen(port, () => {
+                    console.log(`Test web server running at http://localhost:${port}`);
+                    resolve();
+                });
+            } catch (e) {
+                reject(e);
+            }
         });
         updater = new AixUpdaterClient({
             baseUrl: `http://localhost:${port}/`,
@@ -35,7 +40,7 @@ describe('Online update', function() {
         });
     });
 
-    it('should update to v2', async() => {
+    it("should update to v2", async() => {
         const v2path = "./test/v2";
         await fs.copy("./test/v1", localpath, { recursive: true });
         const newVersion = await updater.update(localpath);
@@ -54,13 +59,12 @@ describe('Online update', function() {
         await fs.remove(localpath);
     });
 
-    it('should update progress', async() => {
-        const v2path = "./test/v2";
+    it("should update progress", async() => {
         await fs.copy("./test/v1", localpath, { recursive: true });
-        let log = '';
+        let log = "";
         /** @type {(progress: AixUpdaterClient.UpdateProgress) => void} */
         const cb = (progress) => {
-            const l = progress.toString('zh');
+            const l = progress.toString("zh");
             // console.log(l);
             log += l + "\n";
         };
@@ -79,17 +83,17 @@ describe('Online update', function() {
 });
 
 
-describe('Offline update', function() {
+describe("Offline update", function() {
     /** @type {AixUpdaterClient} */
     let updater;
     before(async() => {
         updater = new AixUpdaterClient({
-            baseUrl: `file://./test/`,
+            baseUrl: "file://./test/",
             artifact: "test-artifact"
         });
     });
 
-    it('should update to v2', async() => {
+    it("should update to v2", async() => {
         const v2path = "./test/v2";
         await fs.copy("./test/v1", localpath, { recursive: true });
         const newVersion = await updater.update(localpath);

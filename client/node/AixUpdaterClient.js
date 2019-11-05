@@ -2,8 +2,8 @@
 const fs = require("fs-extra");
 const path = require("path");
 const semver = require("semver");
-const XXHash = require('xxhash');
-const webdownload = require('download');
+const XXHash = require("xxhash");
+const webdownload = require("download");
 const asyncPool = require("tiny-async-pool");
 const bsdiff = require("bsdiff-nodejs");
 
@@ -117,7 +117,7 @@ async function _retry(options, f, ...args) {
                 setTimeout(() => {
                     _retry(options, f, ...args).then(resolve, reject);
                 }, options.interval);
-            })
+            });
         }
     } else {
         throw options.lastThrown;
@@ -173,10 +173,10 @@ class UpdateProgress {
         if (this.downloadProgress) {
             status += `${this.downloadProgress.filesDownloaded}/${this.downloadProgress.totalFiles}`;
             if (this.downloadProgress.downloadProgresses && this.downloadProgress.downloadProgresses.length > 0) {
-                status += ' - ';
+                status += " - ";
                 for (let fileProgress of this.downloadProgress.downloadProgresses) {
-                    status += `\n${fileProgress.name}: ${fileProgress.transferred}/${fileProgress.total} - `
-                    status += fileProgress.percent.toLocaleString(undefined, { style: 'percent', minimumFractionDigits: 2 });
+                    status += `\n${fileProgress.name}: ${fileProgress.transferred}/${fileProgress.total} - `;
+                    status += fileProgress.percent.toLocaleString(undefined, { style: "percent", minimumFractionDigits: 2 });
                 }
             }
         }
@@ -356,7 +356,7 @@ class AixUpdaterClient {
      * @returns {Promise<PatchInfo[]>} the path to the downloaded folder containing patch files.
      */
     async fetchPatch(localPath, toVersion, progressListener) {
-        progressListener = progressListener || ((_) => {});
+        progressListener = progressListener || (() => {});
         progressListener(new UpdateProgress(UpdateStatus.FETCH_MANIFEST, nStatus, {
             totalFiles: 1,
             filesDownloaded: 0
@@ -384,7 +384,7 @@ class AixUpdaterClient {
                 totalFiles: fileList.length,
                 filesDownloaded: verifiedCount
             }));
-        }
+        };
         await Promise.all(fileList.map(verifyDigest));
 
         /** @type {PatchInfo[]} */
@@ -414,8 +414,6 @@ class AixUpdaterClient {
                         downloadProgresses: downloading
                     }));
                 });
-                downloadStatus.percent = 1;
-                downloadStatus.transferred = downloadStatus.total;
                 progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
                     totalFiles: downloadList.length,
                     filesDownloaded: downloadedFiles.length,
@@ -428,6 +426,20 @@ class AixUpdaterClient {
                     newDigest: fileInfo.digest,
                 });
             } catch (e) {
+                // download full file
+                await downloadTo(joinAbsoluteUrlPath(this.baseUrl, "files", fileInfo.digest), this.storageFolder, (progress) => {
+                    Object.assign(downloadStatus, progress);
+                    progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
+                        totalFiles: downloadList.length,
+                        filesDownloaded: downloadedFiles.length,
+                        downloadProgresses: downloading
+                    }));
+                });
+                progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
+                    totalFiles: downloadList.length,
+                    filesDownloaded: downloadedFiles.length,
+                    downloadProgresses: downloading
+                }));
                 downloadedFiles.push({
                     file: path.join(localPath, fileInfo.path),
                     patchFile: "",
@@ -444,7 +456,7 @@ class AixUpdaterClient {
                 filesDownloaded: downloadedFiles.length,
                 downloadProgresses: downloading
             }));
-        }
+        };
         progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
             totalFiles: downloadList.length,
             filesDownloaded: 0
@@ -469,7 +481,7 @@ class AixUpdaterClient {
     async applyPatch(patches, verifyOld, verifyNew) {
         const getPatchedFileTemp = (newDigest) => {
             return path.join(this.storageFolder, newDigest);
-        }
+        };
         await fs.mkdirp(this.storageFolder);
         await Promise.all(patches.map(async({ file, patchFile, oldDigest, newDigest }) => {
             if (verifyOld) {
@@ -487,8 +499,6 @@ class AixUpdaterClient {
             } catch (e) {
                 if (patchFile.length > 0) {
                     await retry(bsdiff.patch, file, patchedFileTemp, patchFile);
-                } else {
-
                 }
                 if (verifyNew) {
                     const verifyNewDigest = await calcDigest(patchedFileTemp);
@@ -498,7 +508,7 @@ class AixUpdaterClient {
                 }
             }
         }));
-        await Promise.all(patches.map(async({ file, patchFile, oldDigest, newDigest }) => {
+        await Promise.all(patches.map(async({ file, oldDigest, newDigest }) => {
             const patchedFileTemp = getPatchedFileTemp(newDigest);
             await fs.promises.rename(file, getPatchedFileTemp(oldDigest));
             await fs.promises.copyFile(patchedFileTemp, file);
@@ -514,11 +524,11 @@ class AixUpdaterClient {
      * @returns {Promise<string | void>} If a newer version is installed, returns the new version. Otherwise returns null.
      */
     async update(localPath, targetVersion, progressListener) {
-        if (typeof targetVersion === 'function') {
+        if (typeof targetVersion === "function") {
             progressListener = targetVersion;
             targetVersion = undefined;
         }
-        progressListener = progressListener || ((_) => {});
+        progressListener = progressListener || (() => {});
         progressListener(new UpdateProgress(UpdateStatus.READ_LOCAL_VERSION, nStatus));
         const localVersion = await this.getCurrentLocalVersion(localPath);
         progressListener(new UpdateProgress(UpdateStatus.FETCH_REMOTE_VERSION, nStatus));

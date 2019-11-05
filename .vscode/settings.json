@@ -1,3 +1,7 @@
 {
-    "python.pythonPath": "C:\\Users\\felix\\AppData\\Local\\Programs\\Python\\Python37\\python.exe"
+    "python.pythonPath": "C:\\Users\\felix\\AppData\\Local\\Programs\\Python\\Python37\\python.exe",
+    "eslint.workingDirectories": [{
+        "directory": "client\\node",
+        "changeProcessCWD": true
+    }]
 }

@@ -18,6 +18,9 @@
   },
   "devDependencies": {
     "chai": "^4.2.0",
+    "eslint": "^6.6.0",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-mocha": "^6.2.1",
     "http-server": "^0.11.1",
     "mocha": "^6.2.2",
     "portfinder": "^1.0.25",
