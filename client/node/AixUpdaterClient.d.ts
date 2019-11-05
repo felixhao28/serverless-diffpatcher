@@ -41,6 +41,36 @@ declare namespace AixUpdaterClient {
          */
         newDigest: string,
     }
+
+    export interface FileProgress {
+        percent: number,
+        transferred: number,
+        total: number,
+    }
+
+    export enum UpdateStatus {
+        FETCH_REMOTE_VERSION,
+        READ_LOCAL_VERSION,
+        FETCH_MANIFEST,
+        DOWNLOAD_PATCH,
+        PATCH_FILE
+    }
+
+    export interface DownloadProgress {
+        downloadProgress?: FileProgress;
+        filesDownloaded: number;
+        totalFiles: number;
+    }
+
+    export class UpdateProgress {
+        status: UpdateStatus;
+        step: number;
+        totalSteps: number;
+        downloadProgress?: DownloadProgress;
+
+        constructor(status: UpdateStatus, step: number, totalSteps: number, downloadProgress?: DownloadProgress);
+        toString(lang?: string): string;
+    }
 }
 
 /**
@@ -97,7 +127,7 @@ declare class AixUpdaterClient {
      * 
      * @returns the information on patch files.
      */
-    async fetchPatch(localPath: string, toVersion: string): Promise<AixUpdaterClient.PatchInfo[]>;
+    async fetchPatch(localPath: string, toVersion: string, progressListener?: (progress: UpdateProgress) => void): Promise<AixUpdaterClient.PatchInfo[]>;
 
     /**
      * Apply patch files to a folder
@@ -106,17 +136,17 @@ declare class AixUpdaterClient {
      * @param verifyOld check file integrity before patching
      * @param verifyNew check file integrity after patching
      */
-    async applyPatch(patches: AixUpdaterClient.PatchInfo[], verifyOld=true, verifyNew=true): Promise<void>;
+    async applyPatch(patches: AixUpdaterClient.PatchInfo[], verifyOld = true, verifyNew = true): Promise<void>;
 
     /**
-     * Fetch newest patch files and 
+     * Fetch newest patch files and apply them
      * 
      * @param localPath the path to the local directory containing the need-to-update artifact.
      * @param targetVersion the target version to update to
      *
      * @returns If a newer version is installed, returns the new version. Otherwise returns null.
      */
-    async update(localPath: string, targetVersion?: string): Promise<string | null>;
+    async update(localPath: string, targetVersion?: string, progressListener?: (progress: UpdateProgress) => void): Promise<string | null>;
 
     /**
      * Cleans up the local storage path.

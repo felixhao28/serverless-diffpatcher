@@ -54,6 +54,24 @@ describe('Online update', function() {
         await fs.remove(localpath);
     });
 
+    it('should update progress', async() => {
+        const v2path = "./test/v2";
+        await fs.copy("./test/v1", localpath, { recursive: true });
+        let log = '';
+        /** @type {(progress: AixUpdaterClient.UpdateProgress) => void} */
+        const cb = (progress) => {
+            const l = progress.toString('zh');
+            // console.log(l);
+            log += l + "\n";
+        };
+        await updater.update(localpath, cb);
+        // console.log(log);
+        for (let i = 1; i < 6; i++) {
+            expect(log.indexOf(`(${i}/6)`) >= 0);
+        }
+        await fs.remove(localpath);
+    });
+
     after(async() => {
         await updater.cleanUp();
         server.close();
