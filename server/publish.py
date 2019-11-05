@@ -225,7 +225,10 @@ def main():
         bucket = oss2.Bucket(auth, endpoint, bucketname)
 
         def upload(target_path, source):
-            bucket.put_object_from_file(target_path, source)
+            if len(source) < 256 and os.path.exists(source):
+                bucket.put_object_from_file(target_path, source)
+            else:
+                bucket.put_object(target_path, source)
 
     storage = Storage("storage-{}".format(artifact), "registry-{}.json".format(artifact))
     for old_version in storage.storage_registry["versions"]:

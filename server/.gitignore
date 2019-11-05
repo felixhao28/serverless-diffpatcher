@@ -1,4 +1,4 @@
 .idea
-storage
+storage-*
 aliyunoss.properties
-registry.json
+registry-*.json
