@@ -372,18 +372,31 @@ class AixUpdaterClient {
         let verifiedCount = 0;
         /** @type {(fileInfo: FileInfo) => Promise<void>} */
         const verifyDigest = async(fileInfo) => {
-            const digest = await calcDigest(path.join(localPath, fileInfo.path));
-            if (fileInfo.digest !== digest) {
-                downloadList.push({
-                    oldDigest: digest,
-                    ...fileInfo
-                });
+            try {
+                const digest = await calcDigest(path.join(localPath, fileInfo.path));
+                if (fileInfo.digest !== digest) {
+                    downloadList.push({
+                        oldDigest: digest,
+                        ...fileInfo
+                    });
+                }
+                verifiedCount += 1;
+                progressListener(new UpdateProgress(UpdateStatus.FETCH_MANIFEST, nStatus, {
+                    totalFiles: fileList.length,
+                    filesDownloaded: verifiedCount
+                }));
+            } catch (e) {
+                if (e.code === "ENOENT") {
+                    // new file
+                    downloadList.push({
+                        oldDigest: "",
+                        ...fileInfo
+                    });
+                    return;
+                }
+                console.log(e);
+                throw e;
             }
-            verifiedCount += 1;
-            progressListener(new UpdateProgress(UpdateStatus.FETCH_MANIFEST, nStatus, {
-                totalFiles: fileList.length,
-                filesDownloaded: verifiedCount
-            }));
         };
         await Promise.all(fileList.map(verifyDigest));
 
@@ -406,6 +419,9 @@ class AixUpdaterClient {
             };
             downloading.push(downloadStatus);
             try {
+                if (fileInfo.oldDigest.length === 0) {
+                    throw new Error("need to download full file");
+                }
                 await downloadTo(downloadUrl, this.storageFolder, (progress) => {
                     Object.assign(downloadStatus, progress);
                     progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
@@ -427,7 +443,9 @@ class AixUpdaterClient {
                 });
             } catch (e) {
                 // download full file
-                await downloadTo(joinAbsoluteUrlPath(this.baseUrl, "files", fileInfo.digest), this.storageFolder, (progress) => {
+                const fullFileUrl = joinAbsoluteUrlPath(this.baseUrl, "files", fileInfo.digest);
+                console.log("Download full file: " + fullFileUrl);
+                await downloadTo(fullFileUrl, this.storageFolder, (progress) => {
                     Object.assign(downloadStatus, progress);
                     progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
                         totalFiles: downloadList.length,
@@ -443,7 +461,7 @@ class AixUpdaterClient {
                 downloadedFiles.push({
                     file: path.join(localPath, fileInfo.path),
                     patchFile: "",
-                    oldDigest: "",
+                    oldDigest: fileInfo.oldDigest,
                     newDigest: fileInfo.digest,
                 });
             }
@@ -510,7 +528,9 @@ class AixUpdaterClient {
         }));
         await Promise.all(patches.map(async({ file, oldDigest, newDigest }) => {
             const patchedFileTemp = getPatchedFileTemp(newDigest);
-            await fs.promises.rename(file, getPatchedFileTemp(oldDigest));
+            if (oldDigest.length > 0) {
+                await fs.promises.rename(file, getPatchedFileTemp(oldDigest));
+            }
             await fs.promises.copyFile(patchedFileTemp, file);
         }));
     }

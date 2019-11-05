@@ -14,8 +14,9 @@ describe("Online update", function() {
     /** @type {AixUpdaterClient} */
     let updater;
     let server;
+    let port;
     before(async() => {
-        const port = await portfinder.getPortPromise();
+        port = await portfinder.getPortPromise();
         await new Promise((resolve, reject) => {
             try {
                 server = http.createServer((request, response) => {
@@ -34,15 +35,16 @@ describe("Online update", function() {
                 reject(e);
             }
         });
+        await fs.remove(localpath);
+    });
+
+    it("should update to v2", async() => {
         updater = new AixUpdaterClient({
             baseUrl: `http://localhost:${port}/`,
             artifact: "test-artifact"
         });
-    });
-
-    it("should update to v2", async() => {
-        const v2path = "./test/v2";
-        await fs.copy("./test/v1", localpath, { recursive: true });
+        await fs.copy("./test/artifacts/base/v1", localpath, { recursive: true });
+        const v2path = "./test/artifacts/base/v2";
         const newVersion = await updater.update(localpath);
         expect(newVersion).to.equal("0.0.2");
 
@@ -57,10 +59,63 @@ describe("Online update", function() {
         }
 
         await fs.remove(localpath);
+        await updater.cleanUp();
+    });
+
+    it("patch file missing", async() => {
+        updater = new AixUpdaterClient({
+            baseUrl: `http://localhost:${port}/`,
+            artifact: "test-artifact-miss-patch"
+        });
+        await fs.copy("./test/artifacts/missing-patch/v1", localpath, { recursive: true });
+        const v2path = "./test/artifacts/missing-patch/v2";
+        const newVersion = await updater.update(localpath);
+        expect(newVersion).to.equal("0.0.2");
+
+        const filelist = await fs.readdir(localpath);
+        const v2filelist = await fs.readdir(v2path);
+        expect(filelist.length).to.equal(v2filelist.length);
+
+        for (const f of filelist) {
+            const buf1 = await fs.readFile(path.join(localpath, f));
+            const buf2 = await fs.readFile(path.join(v2path, f));
+            expect(buf1.equals(buf2));
+        }
+
+        await fs.remove(localpath);
+        await updater.cleanUp();
+    });
+
+    it("patch new file", async() => {
+        updater = new AixUpdaterClient({
+            baseUrl: `http://localhost:${port}/`,
+            artifact: "test-artifact-new-file"
+        });
+        await fs.copy("./test/artifacts/new-file/v1", localpath, { recursive: true });
+        const v2path = "./test/artifacts/new-file/v2";
+        const newVersion = await updater.update(localpath);
+        expect(newVersion).to.equal("0.0.2");
+
+        const filelist = await fs.readdir(localpath);
+        const v2filelist = await fs.readdir(v2path);
+        expect(filelist.length).to.equal(v2filelist.length);
+
+        for (const f of filelist) {
+            const buf1 = await fs.readFile(path.join(localpath, f));
+            const buf2 = await fs.readFile(path.join(v2path, f));
+            expect(buf1.equals(buf2));
+        }
+
+        await fs.remove(localpath);
+        await updater.cleanUp();
     });
 
     it("should update progress", async() => {
-        await fs.copy("./test/v1", localpath, { recursive: true });
+        updater = new AixUpdaterClient({
+            baseUrl: `http://localhost:${port}/`,
+            artifact: "test-artifact"
+        });
+        await fs.copy("./test/artifacts/base/v1", localpath, { recursive: true });
         let log = "";
         /** @type {(progress: AixUpdaterClient.UpdateProgress) => void} */
         const cb = (progress) => {
@@ -74,10 +129,10 @@ describe("Online update", function() {
             expect(log.indexOf(`(${i}/6)`) >= 0);
         }
         await fs.remove(localpath);
+        await updater.cleanUp();
     });
 
     after(async() => {
-        await updater.cleanUp();
         server.close();
     });
 });
@@ -94,8 +149,8 @@ describe("Offline update", function() {
     });
 
     it("should update to v2", async() => {
-        const v2path = "./test/v2";
-        await fs.copy("./test/v1", localpath, { recursive: true });
+        const v2path = "./test/artifacts/base/v2";
+        await fs.copy("./test/artifacts/base/v1", localpath, { recursive: true });
         const newVersion = await updater.update(localpath);
         expect(newVersion).to.equal("0.0.2");
 

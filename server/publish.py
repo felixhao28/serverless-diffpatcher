@@ -272,6 +272,7 @@ def main():
         "version": version,
         "files": files
     })
+    upload("update/{}/latest".format(artifact), version)
     if not dry:
         storage.save()
 
