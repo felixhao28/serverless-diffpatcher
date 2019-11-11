@@ -330,11 +330,11 @@ class AixUpdaterClient {
      * @param {string} version 
      * @returns {Promise<FileInfo[]>}
      */
-    async fetchFileList(version) {
-        const filelistString = (await download(joinAbsoluteUrlPath(this.baseUrl, "filelist", version))).toString("utf-8");
+    async fetchManifest(version) {
+        const manifestString = (await download(joinAbsoluteUrlPath(this.baseUrl, "manifest", version))).toString("utf-8");
         // fetch file list
         const fileList = [];
-        for (let fileLine of filelistString.trim().split("\n")) {
+        for (let fileLine of manifestString.trim().split("\n")) {
             fileLine = fileLine.trim();
             if (fileLine.length > 0) {
                 const [resPath, digest] = fileLine.split("\t");
@@ -361,7 +361,7 @@ class AixUpdaterClient {
             totalFiles: 1,
             filesDownloaded: 0
         }));
-        const fileList = await this.fetchFileList(toVersion);
+        const fileList = await this.fetchManifest(toVersion);
         progressListener(new UpdateProgress(UpdateStatus.FETCH_MANIFEST, nStatus, {
             totalFiles: fileList.length,
             filesDownloaded: 0

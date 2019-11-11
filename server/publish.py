@@ -261,14 +261,14 @@ def main():
             print("Uploading new file {}...{} => {}".format(new_target_rel_path, new_digest, oss_target_path))
             upload(oss_target_path, os.path.join(storage.storage_dir, new_target_rel_path))
 
-    # 更新最新版本号对应的filelist > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/filelist/0.0.3
-    filelist_lines = []
+    # 更新最新版本号对应的manifest > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/manifest/0.0.3
+    manifest_lines = []
     for is_new, new_path, new_digest, new_target_rel_path in files:
-        filelist_lines.append(new_path + "\t" + new_digest)
-    filelist_lines_content = "\n".join(filelist_lines)
-    filelist_oss_target_path = "update/{}/filelist/{}".format(artifact, version)
-    print("Uploading file list => {}\n=========\n{}\n===END===\n".format(filelist_oss_target_path, filelist_lines_content))
-    upload(filelist_oss_target_path, filelist_lines_content)
+        manifest_lines.append(new_path + "\t" + new_digest)
+    manifest_lines_content = "\n".join(manifest_lines)
+    manifest_oss_target_path = "update/{}/manifest/{}".format(artifact, version)
+    print("Uploading file list => {}\n=========\n{}\n===END===\n".format(manifest_oss_target_path, manifest_lines_content))
+    upload(manifest_oss_target_path, manifest_lines_content)
     # 更新最新版本号 > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/latest "0.0.3"
 
     storage.storage_registry["versions"].append({
