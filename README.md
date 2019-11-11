@@ -1,6 +1,6 @@
 # Serverless Diff-Patcher Update Service
 
-A server-less delta-update service using CDN and bsdiff. A Python implementation of server-side [Serverless Diff-Patcher Update Protocol](./blob/master/serverless-diff-patcher-update-protocol.md).
+A server-less delta-update service using CDN and bsdiff. A Python implementation of server-side [Serverless Diff-Patcher Update Protocol](./serverless-diff-patcher-update-protocol.md).
 
 Currently supported CDN:
 
