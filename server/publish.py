@@ -1,6 +1,5 @@
 import re
 import argparse
-import oss2
 import xxhash
 import sys
 import os
@@ -299,6 +298,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
                 with open(target_path, "w", encoding="utf-8") as f:
                     f.write(source)
     else:
+        import oss2
         endpoint, keyid, keysecret, bucketname = read_aliyunoss_properties("aliyunoss.properties")
         auth = oss2.Auth(keyid, keysecret)
         bucket = oss2.Bucket(auth, endpoint, bucketname)
