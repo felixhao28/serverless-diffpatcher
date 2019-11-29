@@ -5,6 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "publish",
+            "type": "python",
+            "request": "launch",
+            "program": "publish.py",
+            "cwd": "${workspaceFolder}/server",
+            "console": "integratedTerminal",
+            "args": ["localserver-win", "C:\\Users\\felix\\Downloads\\localserver-win\\1.1.0", "--offline"]
+        },
+        {
             "type": "node",
             "request": "launch",
             "name": "Node Client Mocha Tests",
@@ -20,6 +29,5 @@
             "internalConsoleOptions": "openOnSessionStart",
             "cwd": "${workspaceFolder}/client/node"
         }
-        
     ]
 }

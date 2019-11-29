@@ -52,6 +52,7 @@ describe("Online update", function() {
         const v2filelist = await fs.readdir(v2path);
         expect(filelist.length).to.equal(v2filelist.length);
 
+        await new Promise(resolve => setTimeout(resolve, 100));
         for (const f of filelist) {
             const buf1 = await fs.readFile(path.join(localpath, f));
             const buf2 = await fs.readFile(path.join(v2path, f));
@@ -76,6 +77,7 @@ describe("Online update", function() {
         const v2filelist = await fs.readdir(v2path);
         expect(filelist.length).to.equal(v2filelist.length);
 
+        await new Promise(resolve => setTimeout(resolve, 100));
         for (const f of filelist) {
             const buf1 = await fs.readFile(path.join(localpath, f));
             const buf2 = await fs.readFile(path.join(v2path, f));
@@ -98,8 +100,9 @@ describe("Online update", function() {
 
         const filelist = await fs.readdir(localpath);
         const v2filelist = await fs.readdir(v2path);
-        expect(filelist.length).to.equal(v2filelist.length);
+        expect(filelist.length + 1).to.equal(v2filelist.length);
 
+        await new Promise(resolve => setTimeout(resolve, 100));
         for (const f of filelist) {
             const buf1 = await fs.readFile(path.join(localpath, f));
             const buf2 = await fs.readFile(path.join(v2path, f));
@@ -130,6 +133,26 @@ describe("Online update", function() {
         }
         await fs.remove(localpath);
         await updater.cleanUp();
+    });
+
+    it("simple patch", async() => {
+        await fs.copy("./test/artifacts/base/v1", localpath, { recursive: true });
+        const v2path = "./test/artifacts/base/v2";
+        const newVersion = await AixUpdaterClient.simplePatch(localpath, `http://localhost:${port}/simplePatch/patch_0.0.1_0.0.2.zip`, `http://localhost:${port}/simplePatch/0.0.2.zip`);
+        expect(newVersion).to.equal("0.0.2");
+
+        const filelist = await fs.readdir(localpath);
+        const v2filelist = await fs.readdir(v2path);
+        expect(filelist.length).to.equal(v2filelist.length);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+        for (const f of filelist) {
+            const buf1 = await fs.readFile(path.join(localpath, f));
+            const buf2 = await fs.readFile(path.join(v2path, f));
+            expect(buf1.equals(buf2));
+        }
+
+        await fs.remove(localpath);
     });
 
     after(async() => {

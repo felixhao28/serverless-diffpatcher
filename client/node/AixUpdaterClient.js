@@ -6,6 +6,42 @@ const XXHash = require("xxhash");
 const webdownload = require("download");
 const asyncPool = require("tiny-async-pool");
 const bsdiff = require("bsdiff-nodejs");
+const zipdecompress = require("decompress");
+const { exec } = require("child_process");
+
+/**
+ * @param {string} cmd
+ */
+async function execAsync(cmd) {
+    return new Promise((resolve, reject) => {
+        exec(cmd, (err, stdout, stderr) => {
+            if (err) {
+                err.message = (err.message || "") + "\nSTDERR: " + stderr;
+                reject(err);
+            } else {
+                resolve(stdout);
+            }
+        });
+    });
+}
+
+/**
+ * 
+ * @param {string} zipPath 
+ * @param {string} targetPath 
+ */
+async function decompress(zipPath, targetPath) {
+    try {
+        await fs.remove(targetPath);
+    } catch (e) {
+        //ignore
+    }
+    if (zipPath.endsWith(".tar.gz")) {
+        await execAsync(`tar zxf "${zipPath}" -C "${targetPath}"`);
+    } else {
+        await zipdecompress(zipPath, targetPath);
+    }
+}
 
 /**
  * @typedef {Object<string, number>} FileProgressLite
@@ -39,8 +75,13 @@ const UpdateStatus = {
     VERIFY_LOCAL_FILES: 3,
     DOWNLOAD_PATCH: 4,
     PATCH_FILE: 5,
+    SIMPLE_READ_LOCAL_VERSION: 0,
+    SIMPLE_DOWNLOAD_PATCH: 1,
+    SIMPLE_PATCH_FILE: 2,
+    SIMPLE_DOWNLOAD_FULL: 1,
 };
 const nStatus = 6;
+const nSimpleStatus = 3;
 
 const localization = {
     STATUS_FETCH_REMOTE_VERSION: {
@@ -66,6 +107,22 @@ const localization = {
     STATUS_PATCH_FILE: {
         en: "Patching local files",
         zh: "更新本地文件",
+    },
+    STATUS_SIMPLE_READ_LOCAL_VERSION: {
+        en: "Reading local version",
+        zh: "读取本地版本",
+    },
+    STATUS_SIMPLE_DOWNLOAD_PATCH: {
+        en: "Downloading patches",
+        zh: "下载更新",
+    },
+    STATUS_SIMPLE_PATCH_FILE: {
+        en: "Patching local files",
+        zh: "更新本地文件",
+    },
+    STATUS_SIMPLE_DOWNLOAD_FULL: {
+        en: "Downloading full files",
+        zh: "下载完整更新",
     },
     STATUS_UNKNOWN: {
         en: "Status unknown",
@@ -166,6 +223,18 @@ class UpdateProgress {
             case UpdateStatus.PATCH_FILE:
                 status = localization.STATUS_PATCH_FILE[lang];
                 break;
+            case UpdateStatus.SIMPLE_READ_LOCAL_VERSION:
+                status = localization.STATUS_SIMPLE_READ_LOCAL_VERSION[lang];
+                break;
+            case UpdateStatus.SIMPLE_DOWNLOAD_PATCH:
+                status = localization.STATUS_SIMPLE_DOWNLOAD_PATCH[lang];
+                break;
+            case UpdateStatus.SIMPLE_PATCH_FILE:
+                status = localization.STATUS_SIMPLE_PATCH_FILE[lang];
+                break;
+            case UpdateStatus.SIMPLE_DOWNLOAD_FULL:
+                status = localization.STATUS_SIMPLE_DOWNLOAD_FULL[lang];
+                break;
             default:
                 status = localization.STATUS_UNKNOWN[lang];
         }
@@ -188,19 +257,30 @@ class UpdateProgress {
  * 
  * @param {string} uri 
  * @param {string} targetFolder
+ * @param {string} [filename]
  * @param {(progress: FileProgressLite) => void} [progressListener] 
  * @returns {Promise<void>}
  */
-async function downloadTo(uri, targetFolder, progressListener) {
+async function downloadTo(uri, targetFolder, filename, progressListener) {
+    if (typeof(filename) === "function") {
+        progressListener = filename;
+        filename = null;
+    }
     if (uri.startsWith("file://")) {
         uri = uri.substring("file://".length);
         await fs.copy(uri, path.join(targetFolder, path.basename(uri)));
     } else {
-        let stream = webdownload(uri, targetFolder);
+        let stream = webdownload(uri, targetFolder, filename && {
+            filename
+        });
         if (progressListener) {
             stream = stream.on("downloadProgress", progressListener);
         }
-        await stream;
+        try {
+            await stream;
+        } catch (error) {
+            console.error(error);
+        }
     }
 }
 
@@ -218,7 +298,12 @@ async function download(uri, progressListener) {
         if (progressListener) {
             stream = stream.on("downloadProgress", progressListener);
         }
-        return stream;
+        try {
+            const content = await stream;
+            return content;
+        } catch (error) {
+            console.error(error);
+        }
     }
 }
 
@@ -260,7 +345,171 @@ async function calcDigest(file) {
     });
 }
 
+/**
+ * 
+ * @param {string} manifestString 
+ */
+function parseManifest(manifestString) {
+    const fileList = [];
+    for (let fileLine of manifestString.trim().split("\n")) {
+        fileLine = fileLine.trim();
+        if (fileLine.length > 0) {
+            const [resPath, digest] = fileLine.split("\t");
+            fileList.push({
+                path: resPath,
+                digest
+            });
+        }
+    }
+    return fileList;
+}
+
+/**
+ * 
+ * @param {PatchInfo[]} patches the patche files.
+ * @param {boolean} verifyOld 
+ * @param {boolean} verifyNew 
+ * @param {(digest: string) => string} getPatchedFileTemp 
+ */
+async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp) {
+    await Promise.all(patches.map(async({ file, patchFile, oldDigest, newDigest }) => {
+        if (verifyOld) {
+            const verifyOldDigest = await calcDigest(file);
+            if (verifyOldDigest !== oldDigest) {
+                throw new Error(`Hash does not match before patching. Expected: ${oldDigest}. Actual: ${verifyOldDigest}.`);
+            }
+        }
+        const patchedFileTemp = getPatchedFileTemp(newDigest);
+        try {
+            const verifyNewDigest = await calcDigest(patchedFileTemp);
+            if (verifyNewDigest !== newDigest) {
+                throw new Error(`Hash does not match on cached file. Expected: ${newDigest}. Actual: ${verifyNewDigest}.`);
+            }
+        } catch (e) {
+            if (patchFile.length > 0) {
+                await retry(bsdiff.patch, file, patchedFileTemp, patchFile);
+            }
+            if (verifyNew) {
+                const verifyNewDigest = await calcDigest(patchedFileTemp);
+                if (verifyNewDigest !== newDigest) {
+                    throw new Error(`Hash does not match after patching. Expected: ${newDigest}. Actual: ${verifyNewDigest}.`);
+                }
+            }
+        }
+    }));
+    await Promise.all(patches.map(async({ file, oldDigest, newDigest }) => {
+        const patchedFileTemp = getPatchedFileTemp(newDigest);
+        if (oldDigest.length > 0) {
+            await fs.promises.rename(file, getPatchedFileTemp(oldDigest));
+        }
+        await fs.promises.copyFile(patchedFileTemp, file);
+    }));
+}
+
 class AixUpdaterClient {
+    /**
+     * Patch a local folder with a simple patch
+     * @param {string} localPath
+     * @param {string} patchUrl
+     * @param {string} fullDownloadUrl
+     * @param {(progress: UpdateProgress) => void} [progressListener]
+     * @param {() => Promise<void>} [beforeUpdate]
+     */
+    static async simplePatch(localPath, patchUrl, fullDownloadUrl, progressListener, beforeUpdate) {
+        beforeUpdate = beforeUpdate || (async() => {});
+        progressListener = progressListener || (() => {});
+        progressListener(new UpdateProgress(UpdateStatus.SIMPLE_READ_LOCAL_VERSION, nSimpleStatus));
+        const localVersion = await AixUpdaterClient.getCurrentLocalVersion(localPath);
+
+        progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_PATCH, nSimpleStatus));
+        const filename = patchUrl.substr(patchUrl.lastIndexOf("/") + 1);
+        try {
+            /** @type {FileProgress} */
+            const downloadStatus = {
+                name: filename,
+                percent: 0,
+                total: 0,
+                transferred: 0,
+            };
+            await downloadTo(patchUrl, localPath, filename, (progress) => {
+                Object.assign(downloadStatus, progress);
+                progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_PATCH, nStatus, {
+                    totalFiles: 1,
+                    filesDownloaded: 0,
+                    downloadProgresses: [downloadStatus]
+                }));
+            });
+            const patchFolder = path.join(localPath, "__" + filename + "__");
+            await decompress(path.join(localPath, filename), patchFolder);
+
+            try {
+                const versionFileContent = await fs.readFile(path.join(patchFolder, ".update"), "utf-8");
+                const [expectedFromVersion, targetVersion] = versionFileContent.split("\t");
+                if (expectedFromVersion !== localVersion) {
+                    throw new Error(`Local version ${localVersion} does not match patch applicable version ${expectedFromVersion}`);
+                }
+                const manifestContent = await fs.readFile(path.join(patchFolder, ".manifest"), "utf-8");
+                const fileList = parseManifest(manifestContent);
+                const patches = [];
+                for (const fileInfo of fileList) {
+                    const digest = await calcDigest(path.join(localPath, fileInfo.path));
+                    if (digest !== fileInfo.digest) {
+                        patches.push({
+                            file: path.join(localPath, fileInfo.path),
+                            patchFile: path.join(patchFolder, digest + "_" + fileInfo.digest + ".xpatch"),
+                            oldDigest: digest,
+                            newDigest: fileInfo.digest,
+                        });
+                    }
+                }
+
+                try {
+                    await beforeUpdate();
+                    progressListener(new UpdateProgress(UpdateStatus.PATCH_FILE, nSimpleStatus));
+                    await applyAllPatches(patches, false, true, (digest) => {
+                        return path.join(localPath, digest) + ".tmp";
+                    });
+                    return targetVersion;
+                } finally {
+                    for (const fname of await fs.readdir(localPath)) {
+                        if (fname.endsWith(".tmp")) {
+                            await fs.remove(path.join(localPath, fname));
+                        }
+                    }
+                }
+            } finally {
+                await fs.remove(patchFolder);
+            }
+        } catch (e) {
+            // ignore
+            console.error(e);
+        } finally {
+            await fs.remove(path.join(localPath, filename));
+        }
+        const fullFileName = fullDownloadUrl.substring(fullDownloadUrl.lastIndexOf("/") + 1);
+        /** @type {FileProgress} */
+        const downloadStatus = {
+            name: fullFileName,
+            percent: 0,
+            total: 0,
+            transferred: 0,
+        };
+        await downloadTo(fullDownloadUrl, path.join(localPath, ".."), fullFileName, (progress) => {
+            Object.assign(downloadStatus, progress);
+            progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_FULL, nStatus, {
+                totalFiles: 1,
+                filesDownloaded: 0,
+                downloadProgresses: [downloadStatus]
+            }));
+        });
+        const patchFolder = path.join(localPath, "..", "__" + fullFileName + "__");
+        await decompress(path.join(localPath, "..", fullFileName), patchFolder);
+        await beforeUpdate();
+        await fs.move(localPath, path.join(localPath, "..", localVersion));
+        await fs.move(patchFolder, localPath);
+        return AixUpdaterClient.getCurrentLocalVersion(localPath);
+    }
+
     /**
      * @typedef {Object<string, string>} AixUpdaterOptions
      * @property {string} baseUrl The CDN storage path
@@ -299,7 +548,7 @@ class AixUpdaterClient {
      * 
      * @returns {Promise<string>} current version of `localPath`
      */
-    async getCurrentLocalVersion(localPath) {
+    static async getCurrentLocalVersion(localPath) {
         const versionFile = path.join(localPath, ".version");
         const version = await fs.promises.readFile(versionFile, "utf-8");
         return version;
@@ -333,17 +582,7 @@ class AixUpdaterClient {
     async fetchManifest(version) {
         const manifestString = (await download(joinAbsoluteUrlPath(this.baseUrl, "manifest", version))).toString("utf-8");
         // fetch file list
-        const fileList = [];
-        for (let fileLine of manifestString.trim().split("\n")) {
-            fileLine = fileLine.trim();
-            if (fileLine.length > 0) {
-                const [resPath, digest] = fileLine.split("\t");
-                fileList.push({
-                    path: resPath,
-                    digest
-                });
-            }
-        }
+        const fileList = parseManifest(manifestString);
         return fileList;
     }
 
@@ -408,7 +647,7 @@ class AixUpdaterClient {
         /** @type {(fileInfo: FileInfo & {oldDigest: string}) => Promise<void>} */
         const downloadPatch = async(fileInfo) => {
             // download patch
-            const patchName = `${fileInfo.oldDigest}_${fileInfo.digest}`;
+            const patchName = `${fileInfo.oldDigest}_${fileInfo.digest}.xpatch`;
             const downloadUrl = joinAbsoluteUrlPath(this.baseUrl, "patch", patchName);
             /** @type {FileProgress} */
             const downloadStatus = {
@@ -497,42 +736,14 @@ class AixUpdaterClient {
      * @returns {Promise<void>}
      */
     async applyPatch(patches, verifyOld, verifyNew) {
+        /**
+         * @param {string} newDigest
+         */
         const getPatchedFileTemp = (newDigest) => {
             return path.join(this.storageFolder, newDigest);
         };
         await fs.mkdirp(this.storageFolder);
-        await Promise.all(patches.map(async({ file, patchFile, oldDigest, newDigest }) => {
-            if (verifyOld) {
-                const verifyOldDigest = await calcDigest(file);
-                if (verifyOldDigest !== oldDigest) {
-                    throw new Error(`Hash does not match before patching. Expected: ${oldDigest}. Actual: ${verifyOldDigest}.`);
-                }
-            }
-            const patchedFileTemp = getPatchedFileTemp(newDigest);
-            try {
-                const verifyNewDigest = await calcDigest(patchedFileTemp);
-                if (verifyNewDigest !== newDigest) {
-                    throw new Error(`Hash does not match on cached file. Expected: ${newDigest}. Actual: ${verifyNewDigest}.`);
-                }
-            } catch (e) {
-                if (patchFile.length > 0) {
-                    await retry(bsdiff.patch, file, patchedFileTemp, patchFile);
-                }
-                if (verifyNew) {
-                    const verifyNewDigest = await calcDigest(patchedFileTemp);
-                    if (verifyNewDigest !== newDigest) {
-                        throw new Error(`Hash does not match after patching. Expected: ${newDigest}. Actual: ${verifyNewDigest}.`);
-                    }
-                }
-            }
-        }));
-        await Promise.all(patches.map(async({ file, oldDigest, newDigest }) => {
-            const patchedFileTemp = getPatchedFileTemp(newDigest);
-            if (oldDigest.length > 0) {
-                await fs.promises.rename(file, getPatchedFileTemp(oldDigest));
-            }
-            await fs.promises.copyFile(patchedFileTemp, file);
-        }));
+        applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp);
     }
 
     /**
@@ -550,7 +761,7 @@ class AixUpdaterClient {
         }
         progressListener = progressListener || (() => {});
         progressListener(new UpdateProgress(UpdateStatus.READ_LOCAL_VERSION, nStatus));
-        const localVersion = await this.getCurrentLocalVersion(localPath);
+        const localVersion = await AixUpdaterClient.getCurrentLocalVersion(localPath);
         progressListener(new UpdateProgress(UpdateStatus.FETCH_REMOTE_VERSION, nStatus));
         targetVersion = targetVersion || await this.hasNewVersion(localVersion);
         if (!targetVersion) {

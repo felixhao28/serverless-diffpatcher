@@ -93,6 +93,11 @@ declare namespace AixUpdaterClient {
  * ```
  */
 declare class AixUpdaterClient {
+    /**
+     * Patch a local folder with a simple patch
+     */
+    static async simplePatch(localPath: string, patchUrl: string, fullDownloadUrl: string, progressListener?: (progress: UpdateProgress) => void, beforeUpdate?: () => Promise<void>): Promise<string>;
+
     constructor(options: AixUpdaterClient.AixUpdaterOptions);
 
     /**
