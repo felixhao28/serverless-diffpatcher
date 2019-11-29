@@ -11,7 +11,7 @@
             "program": "publish.py",
             "cwd": "${workspaceFolder}/server",
             "console": "integratedTerminal",
-            "args": ["localserver-win", "C:\\Users\\felix\\Downloads\\localserver-win\\1.1.0", "--offline"]
+            "args": ["localserver-win", "C:\\Users\\felix\\Downloads\\localserver-win\\1.1.0", "--offline", "-y"]
         },
         {
             "type": "node",

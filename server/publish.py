@@ -176,10 +176,10 @@ class Storage:
         print("Patch file from {} to {} => {} generated!".format(from_path, to_path, patch_path))
         return patch_path
 
-    def do_remove(self, version=None):
+    def do_remove(self, version=None, force=False):
         artifact = self.artifact
         if version is None:
-            if not query_yes_no("Dangerous!! Completely remove {}?".format(artifact)):
+            if not force and not query_yes_no("Dangerous!! Completely remove {}?".format(artifact)):
                 sys.exit(-1)
             try:
                 os.remove("registry-{}.json".format(artifact))
@@ -188,7 +188,7 @@ class Storage:
             shutil.rmtree("storage-{}".format(artifact), ignore_errors=True)
             shutil.rmtree("./update/{}".format(artifact), ignore_errors=True)
         else:
-            if not query_yes_no("Remove {}@{}?".format(artifact, version)):
+            if not force and not query_yes_no("Remove {}@{}?".format(artifact, version)):
                 sys.exit(-1)
             
             prev_version = None
@@ -235,6 +235,7 @@ def parse_args():
     parser.add_argument("--dry", action="store_true", default=False)
     parser.add_argument("--patch_only", action="store_true", default=False)
     parser.add_argument("--remove", action="store_true", default=False)
+    parser.add_argument("-y", action="store_true", default=False)
     args = parser.parse_args()
     artifact = args.artifact_id
     if not args.remove:
@@ -250,9 +251,12 @@ def parse_args():
         sys.stderr.write("Error: patch_only can only be used in offline mode!\n")
         sys.exit(-1)
     if not args.offline:
-        if not query_yes_no("Online?"):
+        if not args.y and not query_yes_no("Online?"):
             args.offline = True
-    return artifact, new_dir, version, args.offline, args.dry, args.patch_only, args.remove
+    args.artifact = artifact
+    args.new_dir = new_dir
+    args.version = version
+    return args
 
 
 def read_aliyunoss_properties(filename):
@@ -269,14 +273,13 @@ def read_aliyunoss_properties(filename):
                 properties[key] = value
     return properties["spring.file.endpoint"], properties["spring.file.keyid"], properties["spring.file.keysecret"], properties["spring.file.bucketname"]
 
-def main():
+def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_args):
     # 当前制品id > "localserver"
     # 拿到新版本号  > "0.0.3"
-    artifact, new_dir, version, offline, dry, patch_only, remove = parse_args()
 
     storage = Storage(artifact, "storage-{}".format(artifact), "registry-{}.json".format(artifact))
     if remove:
-        storage.do_remove(version)
+        storage.do_remove(version, force=y)
         storage.save()
         sys.exit(0)
 
@@ -309,7 +312,7 @@ def main():
 
     for old_version in storage.storage_registry["versions"]:
         if old_version["version"] == version:
-            storage.do_remove(version)
+            storage.do_remove(version, force=y)
     # 计算每一个文件的digest 11223344,以及路径 model/python.dat，将文件保存到storage > /storage/files/model/python.dat.11223344
     files = storage.handle_dir(new_dir)  # type: List[Tuple[bool, str, str, str]] # is_new, path, digest, target_full_path
 
@@ -375,4 +378,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(**vars(parse_args()))

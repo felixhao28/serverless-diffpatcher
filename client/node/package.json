@@ -1,7 +1,7 @@
 {
-  "name": "aix-updater-client",
+  "name": "serverless-diff-patcher",
   "version": "1.0.0",
-  "description": "A NodeJS client for Aix Smart Update Protocal",
+  "description": "A NodeJS client for Serverless Diff-Patcher Update Protocol",
   "main": "AixUpdaterClient.js",
   "scripts": {
     "test": "mocha"
@@ -14,15 +14,15 @@
     "download": "^7.1.0",
     "fs-extra": "^8.1.0",
     "semver": "^6.3.0",
-    "tiny-async-pool": "^1.0.4",
+    "tiny-async-pool": "^1.1.0",
     "xxhash": "^0.3.0"
   },
   "devDependencies": {
     "chai": "^4.2.0",
-    "eslint": "^6.6.0",
-    "eslint-config-airbnb-base": "^13.1.0",
-    "eslint-plugin-mocha": "^6.2.1",
-    "http-server": "^0.11.1",
+    "eslint": "^6.7.1",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-plugin-mocha": "^6.2.2",
+    "http-server": "^0.12.0",
     "mocha": "^6.2.2",
     "portfinder": "^1.0.25",
     "serve": "^11.2.0"
