@@ -661,7 +661,7 @@ class AixUpdaterClient {
                 if (fileInfo.oldDigest.length === 0) {
                     throw new Error("need to download full file");
                 }
-                await downloadTo(downloadUrl, this.storageFolder, (progress) => {
+                await downloadTo(downloadUrl, this.storageFolder, null, (progress) => {
                     Object.assign(downloadStatus, progress);
                     progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
                         totalFiles: downloadList.length,
@@ -684,7 +684,7 @@ class AixUpdaterClient {
                 // download full file
                 const fullFileUrl = joinAbsoluteUrlPath(this.baseUrl, "files", fileInfo.digest);
                 console.log("Download full file: " + fullFileUrl);
-                await downloadTo(fullFileUrl, this.storageFolder, (progress) => {
+                await downloadTo(fullFileUrl, this.storageFolder, null, (progress) => {
                     Object.assign(downloadStatus, progress);
                     progressListener(new UpdateProgress(UpdateStatus.DOWNLOAD_PATCH, nStatus, {
                         totalFiles: downloadList.length,

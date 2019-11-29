@@ -29,7 +29,6 @@ def mkdir_p(path):
 def get_version(version, new_dir):
     if version is not None and not re.fullmatch(r'\d+(\.\d+)*', version):
         print("Version {} is not in <number>[.<number>[.<number>]] format")
-
     version_file = os.path.join(new_dir, ".version")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
