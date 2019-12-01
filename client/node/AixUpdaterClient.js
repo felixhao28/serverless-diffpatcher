@@ -298,12 +298,7 @@ async function download(uri, progressListener) {
         if (progressListener) {
             stream = stream.on("downloadProgress", progressListener);
         }
-        try {
-            const content = await stream;
-            return content;
-        } catch (error) {
-            console.error(error);
-        }
+        return stream;
     }
 }
 
@@ -406,7 +401,135 @@ async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp
     }));
 }
 
+class AiXCancellationToken {
+    constructor() {
+        this.cancelled = false;
+        /** @type {((reason: any) => void)[]} */
+        this.listeners = [];
+    }
+
+    /**
+     * @param {any} reason
+     */
+    cancel(reason) {
+        this.reason = reason;
+        this.listeners.forEach((element) => element(this.reason));
+    }
+
+    /**
+     * @param {(reason: any) => void} listener
+     */
+    onCancellationRequested(listener) {
+        this.listeners.push(listener);
+    }
+}
+
+/**
+ * 
+ * @param {string} url 
+ * @param {string} targetPath 
+ * @param {(p: FileProgressLite) => void} onProgress 
+ * @param {(elapsed: number, transferred: number, speed: number) => void} onSpeed 
+ * @param {(err?: any) => void} onErr 
+ * @param {AiXCancellationToken} token 
+ */
+async function downloadEx(url, targetPath, onProgress, onSpeed, onErr, token) {
+    let speedTestStart = 0;
+    let totalP = {
+        transferred: 0,
+        total: 1,
+    };
+    const speedTester = onSpeed && setInterval(() => {
+        const elapsed = speedTestStart > 0 ? Date.now() - speedTestStart : 0;
+        const speed = elapsed > 0 ? totalP.transferred / (elapsed / 1000) : 0; // byte / sec
+        onSpeed(elapsed, totalP.transferred, speed);
+    }, 100);
+
+    const stream = webdownload(url, targetPath);
+    let myReq = null;
+    stream.on("request", (req) => {
+        myReq = req;
+    });
+    token.onCancellationRequested((reason) => {
+        stream.end();
+        if (myReq) {
+            myReq.abort();
+        }
+        onErr(reason);
+    });
+    stream.on("downloadProgress", (p) => {
+        totalP = p;
+        if (speedTestStart === 0) {
+            speedTestStart = Date.now();
+        }
+        onProgress(p);
+    });
+    return stream.then((value) => {
+        clearInterval(speedTester);
+        if (!token.cancelled) {
+            const elapsed = Date.now() - speedTestStart;
+            const speed = totalP.transferred / (elapsed / 1000); // byte / sec
+            onSpeed(elapsed, totalP.transferred, speed);
+        }
+        return value;
+    }, (reason) => {
+        clearInterval(speedTester);
+        onErr(reason);
+    });
+}
+
+
+/**
+ * 
+ * @param {string} url 
+ */
+async function getDownloadSpeed(url) {
+    const tmpPath = "speedtest." + Math.random() + ".tmp";
+    const cancellationToken = new AiXCancellationToken();
+    let testSpeed = 0;
+    try {
+        await downloadEx(url, tmpPath, (p) => {
+            //progress
+        }, (elapsed, transferred, speed) => {
+            testSpeed = speed;
+            if (elapsed > 3000 || transferred > 100 * 1024) {
+                cancellationToken.cancel("speedLow");
+            }
+        }, (err) => {
+            if (err === "error" || err === "speedLow") {
+                // ignore
+            } else {
+                cancellationToken.cancel("error");
+                throw err;
+            }
+        }, cancellationToken);
+    } finally {
+        await fs.remove(tmpPath);
+    }
+    return testSpeed;
+}
+
 class AixUpdaterClient {
+    /**
+     * 
+     * @param {string[]} urlList 
+     */
+    static async selectBestMirror(urlList) {
+        if (urlList.length === 1) {
+            return urlList[0];
+        }
+        const promises = urlList.map(url => getDownloadSpeed(url).catch(err => -1));
+        const speeds = await Promise.all(promises);
+        let bestI = 0;
+        for (let i = 0; i < speeds.length; i++) {
+            if (speeds[i] > speeds[bestI]) {
+                bestI = i;
+            }
+        }
+        // console.log(speeds);
+        return urlList[bestI];
+    }
+
     /**
      * Patch a local folder with a simple patch
      * @param {string} localPath
@@ -781,4 +904,5 @@ class AixUpdaterClient {
     }
 }
 
+AixUpdaterClient.AiXCancellationToken = AiXCancellationToken;
 module.exports = AixUpdaterClient;

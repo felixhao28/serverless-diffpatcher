@@ -194,3 +194,44 @@ describe("Offline update", function() {
         await updater.cleanUp();
     });
 });
+
+describe("Speed test", function() {
+    let server;
+    let port;
+    before(async() => {
+        port = await portfinder.getPortPromise();
+        await new Promise((resolve, reject) => {
+            try {
+                server = http.createServer((request, response) => {
+                    // You pass two more arguments for config and middleware
+                    // More details here: https://github.com/zeit/serve-handler#options
+                    return handler(request, response, {
+                        public: "./test"
+                    });
+                });
+
+                server.listen(port, () => {
+                    console.log(`Test web server running at http://localhost:${port}`);
+                    resolve();
+                });
+            } catch (e) {
+                reject(e);
+            }
+        });
+        await fs.remove(localpath);
+    });
+
+    it("should have good speed on correct mirror", async() => {
+        const bestUrl = await AixUpdaterClient.selectBestMirror([
+            `http://localhost:${port}/registry-test-artifact.error.json`,
+            `http://localhost:${port}/registry-test-artifact.error2.json`,
+            `http://localhost:${port}/registry-test-artifact.json`
+        ]);
+        expect(bestUrl).to.equal(`http://localhost:${port}/registry-test-artifact.json`);
+    });
+
+    after(async() => {
+        console.log("server closing");
+        server.close();
+    });
+});

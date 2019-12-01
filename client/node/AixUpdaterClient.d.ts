@@ -71,6 +71,12 @@ declare namespace AixUpdaterClient {
         constructor(status: UpdateStatus, step: number, totalSteps: number, downloadProgress?: DownloadProgress);
         toString(lang?: string): string;
     }
+    
+    class AiXCancellationToken {
+        cancelled: boolean;
+        cancel(reason: any): void;
+        onCancellationRequested(listener: (reason: any) => void): void;
+    }
 }
 
 /**
@@ -93,10 +99,11 @@ declare namespace AixUpdaterClient {
  * ```
  */
 declare class AixUpdaterClient {
+    static async selectBestMirror(urlList: string[]): Promise<string>;
     /**
      * Patch a local folder with a simple patch
      */
-    static async simplePatch(localPath: string, patchUrl: string, fullDownloadUrl: string, progressListener?: (progress: UpdateProgress) => void, beforeUpdate?: () => Promise<void>): Promise<string>;
+    static async simplePatch(localPath: string, patchUrl: string, fullDownloadUrl: string | string[], progressListener?: (progress: UpdateProgress) => void, beforeUpdate?: () => Promise<void>): Promise<string>;
 
     constructor(options: AixUpdaterClient.AixUpdaterOptions);
 
