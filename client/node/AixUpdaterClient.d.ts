@@ -79,6 +79,7 @@ declare namespace AixUpdaterClient {
     }
 }
 
+
 /**
  * A NodeJS client for Aix Smart Update Protocal.
  * 
@@ -99,11 +100,11 @@ declare namespace AixUpdaterClient {
  * ```
  */
 declare class AixUpdaterClient {
-    static async selectBestMirror(urlList: string[]): Promise<string>;
+    static selectBestMirror(urlList: string[]): Promise<string>;
     /**
      * Patch a local folder with a simple patch
      */
-    static async simplePatch(localPath: string, patchUrl: string, fullDownloadUrl: string | string[], progressListener?: (progress: UpdateProgress) => void, beforeUpdate?: () => Promise<void>): Promise<string>;
+    static simplePatch(localPath: string, patchUrl: string, fullDownloadUrl: string | string[], progressListener?: (progress: AixUpdaterClient.UpdateProgress) => void, beforeUpdate?: () => Promise<void>): Promise<string>;
 
     constructor(options: AixUpdaterClient.AixUpdaterOptions);
 
@@ -114,14 +115,14 @@ declare class AixUpdaterClient {
      * 
      * @returns current version of `localPath`
      */
-    async getCurrentLocalVersion(localPath: string): Promise<string>;
+    getCurrentLocalVersion(localPath: string): Promise<string>;
 
     /**
      * Check the newest version online
      * 
      * @returns newest version online
      */
-    async getNewestRemoteVersion(): Promise<string>;
+    getNewestRemoteVersion(): Promise<string>;
 
     /**
      * Compares local version against the newest version online.
@@ -129,7 +130,7 @@ declare class AixUpdaterClient {
      * @param currentVersion the current version to compare
      * @returns If there is a newer version available, returns the new version. Otherwise returns null.
      */
-    async hasNewVersion(currentVersion: string): Promise<string | null>;
+    hasNewVersion(currentVersion: string): Promise<string | null>;
 
     /**
      * Download patch files to temporary folder.
@@ -139,7 +140,7 @@ declare class AixUpdaterClient {
      * 
      * @returns the information on patch files.
      */
-    async fetchPatch(localPath: string, toVersion: string, progressListener?: (progress: UpdateProgress) => void): Promise<AixUpdaterClient.PatchInfo[]>;
+    fetchPatch(localPath: string, toVersion: string, progressListener?: (progress: AixUpdaterClient.UpdateProgress) => void): Promise<AixUpdaterClient.PatchInfo[]>;
 
     /**
      * Apply patch files to a folder
@@ -148,7 +149,7 @@ declare class AixUpdaterClient {
      * @param verifyOld check file integrity before patching
      * @param verifyNew check file integrity after patching
      */
-    async applyPatch(patches: AixUpdaterClient.PatchInfo[], verifyOld = true, verifyNew = true): Promise<void>;
+    applyPatch(patches: AixUpdaterClient.PatchInfo[], verifyOld: boolean, verifyNew: boolean): Promise<void>;
 
     /**
      * Fetch newest patch files and apply them
@@ -158,12 +159,12 @@ declare class AixUpdaterClient {
      *
      * @returns If a newer version is installed, returns the new version. Otherwise returns null.
      */
-    async update(localPath: string, targetVersion?: string, progressListener?: (progress: UpdateProgress) => void): Promise<string | null>;
+    update(localPath: string, targetVersion?: string, progressListener?: (progress: AixUpdaterClient.UpdateProgress) => void): Promise<string | null>;
 
     /**
      * Cleans up the local storage path.
      */
-    async cleanUp(): Promise<void>;
+    cleanUp(): Promise<void>;
 }
 
 export = AixUpdaterClient;
