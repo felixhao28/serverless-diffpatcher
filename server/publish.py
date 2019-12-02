@@ -339,6 +339,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
                     # 上传 > https://files.aixcoder.com/update/localserver/patch/FFEEDDCCBBAA_AABBCCDDEEFF
                     upload("update/{}/patch/{}".format(artifact, patch_filename), patch_path)
                     if last_version:
+                        upload(patch_folder + "full", new_target_rel_path)
                         upload(patch_folder, patch_path)
                         patched.add(new_target_rel_path)
 
@@ -374,6 +375,8 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
     if patch_folder is not None:
         shutil.make_archive(os.path.join(new_dir, "..", "patch_{}_{}".format(prev_version, version)), 'zip', patch_folder)
         shutil.rmtree(patch_folder)
+        shutil.make_archive(os.path.join(new_dir, "..", "patch_{}_{}_full".format(prev_version, version)), 'zip', patch_folder + "full")
+        shutil.rmtree(patch_folder + "full")
 
 
 if __name__ == '__main__':

@@ -2,10 +2,8 @@
 const fs = require("fs-extra");
 const path = require("path");
 const semver = require("semver");
-const XXHash = require("xxhash");
 const webdownload = require("download");
 const asyncPool = require("tiny-async-pool");
-const bsdiff = require("bsdiff-nodejs");
 const zipdecompress = require("decompress");
 const { exec } = require("child_process");
 
@@ -328,6 +326,7 @@ function joinAbsoluteUrlPath(...args) {
  * @returns {Promise<string>}
  */
 async function calcDigest(file) {
+    const XXHash = require("xxhash");
     const hasher = new XXHash.Stream(0, 64);
     return new Promise((resolve, reject) => {
         fs.createReadStream(file).on("error", err => {
@@ -382,7 +381,12 @@ async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp
             }
         } catch (e) {
             if (patchFile.length > 0) {
-                await retry(bsdiff.patch, file, patchedFileTemp, patchFile);
+                if (path.basename(patchFile).indexOf("_") >= 0) {
+                    const bsdiff = require("bsdiff-nodejs");
+                    await retry(bsdiff.patch, file, patchedFileTemp, patchFile);
+                } else {
+                    await fs.copy(patchFile, patchedFileTemp);
+                }
             }
             if (verifyNew) {
                 const verifyNewDigest = await calcDigest(patchedFileTemp);
@@ -577,9 +581,15 @@ class AixUpdaterClient {
                 for (const fileInfo of fileList) {
                     const digest = await calcDigest(path.join(localPath, fileInfo.path));
                     if (digest !== fileInfo.digest) {
+                        let patchPath = path.join(patchFolder, digest + "_" + fileInfo.digest + ".xpatch");
+                        try {
+                            await fs.stat(patchPath);
+                        } catch (error) {
+                            patchPath = path.join(patchFolder, fileInfo.digest + ".xpatch");
+                        }
                         patches.push({
                             file: path.join(localPath, fileInfo.path),
-                            patchFile: path.join(patchFolder, digest + "_" + fileInfo.digest + ".xpatch"),
+                            patchFile: patchPath,
                             oldDigest: digest,
                             newDigest: fileInfo.digest,
                         });
