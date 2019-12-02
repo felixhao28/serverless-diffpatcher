@@ -354,7 +354,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
             patch_path = os.path.join(storage.storage_dir, new_target_rel_path)
             upload(oss_target_path, patch_path)
             if patch_folder is not None and new_target_rel_path not in patched:
-                upload(patch_folder + "full", patch_path)
+                upload(os.path.join(patch_folder + "full", os.path.relpath(os.path.dirname(new_target_rel_path), "files"), os.path.basename(new_target_rel_path)[:-len(new_digest)]), patch_path)
                 upload(patch_folder, patch_path)
 
     # 更新最新版本号对应的manifest > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/manifest/0.0.3
