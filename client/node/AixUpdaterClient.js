@@ -7,6 +7,11 @@ const asyncPool = require("tiny-async-pool");
 const zipdecompress = require("decompress");
 const { exec } = require("child_process");
 
+let hasNative = false;
+try {
+    require("xxhash");
+    hasNative = true;
+} catch (e) {}
 /**
  * @param {string} cmd
  */
@@ -387,11 +392,15 @@ function parseManifest(manifestString) {
  * @param {PatchInfo[]} patches the patche files.
  * @param {boolean} verifyOld 
  * @param {boolean} verifyNew 
+ * @param {AiXCancellationToken} token 
  * @param {(digest: string) => string} getPatchedFileTemp 
  */
-async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp) {
+async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp, token) {
     await Promise.all(patches.map(async({ file, patchFile, oldDigest, newDigest }) => {
-        if (verifyOld) {
+        if (token.cancelled) {
+            throw new Error("cancelled");
+        }
+        if (verifyOld && hasNative) {
             const verifyOldDigest = await calcDigest(file);
             if (verifyOldDigest !== oldDigest) {
                 throw new Error(`Hash does not match before patching. Expected: ${oldDigest}. Actual: ${verifyOldDigest}.`);
@@ -399,6 +408,9 @@ async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp
         }
         const patchedFileTemp = getPatchedFileTemp(newDigest);
         try {
+            if (!hasNative) {
+                throw "";
+            }
             const verifyNewDigest = await calcDigest(patchedFileTemp);
             if (verifyNewDigest !== newDigest) {
                 throw new Error(`Hash does not match on cached file. Expected: ${newDigest}. Actual: ${verifyNewDigest}.`);
@@ -412,7 +424,7 @@ async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp
                     await fs.copy(patchFile, patchedFileTemp);
                 }
             }
-            if (verifyNew) {
+            if (verifyNew && hasNative) {
                 const verifyNewDigest = await calcDigest(patchedFileTemp);
                 if (verifyNewDigest !== newDigest) {
                     throw new Error(`Hash does not match after patching. Expected: ${newDigest}. Actual: ${verifyNewDigest}.`);
@@ -421,6 +433,9 @@ async function applyAllPatches(patches, verifyOld, verifyNew, getPatchedFileTemp
         }
     }));
     await Promise.all(patches.map(async({ file, oldDigest, newDigest }) => {
+        if (token.cancelled) {
+            throw new Error("cancelled");
+        }
         const patchedFileTemp = getPatchedFileTemp(newDigest);
         if (oldDigest.length > 0) {
             await fs.promises.rename(file, getPatchedFileTemp(oldDigest));
@@ -473,7 +488,9 @@ async function downloadEx(url, targetPath, onProgress, onSpeed, onErr, token) {
         onSpeed(elapsed, totalP.transferred, speed);
     }, 100);
 
-    const stream = webdownload(url, targetPath);
+    const stream = webdownload(url, targetPath, {
+        timeout: 5000
+    });
     let myReq = null;
     stream.on("request", (req) => {
         myReq = req;
@@ -510,10 +527,10 @@ async function downloadEx(url, targetPath, onProgress, onSpeed, onErr, token) {
 /**
  * 
  * @param {string} url 
+ * @param {AiXCancellationToken} cancellationToken 
  */
-async function getDownloadSpeed(url) {
+async function getDownloadSpeed(url, cancellationToken) {
     const tmpPath = "speedtest." + Math.random() + ".tmp";
-    const cancellationToken = new AiXCancellationToken();
     let testSpeed = 0;
     try {
         await downloadEx(url, tmpPath, (p) => {
@@ -541,12 +558,13 @@ class AixUpdaterClient {
     /**
      * 
      * @param {string[]} urlList 
+     * @param {AiXCancellationToken} token
      */
-    static async selectBestMirror(urlList) {
+    static async selectBestMirror(urlList, token) {
         if (urlList.length === 1) {
             return urlList[0];
         }
-        const promises = urlList.map(url => getDownloadSpeed(url).catch(err => -1));
+        const promises = urlList.map(url => getDownloadSpeed(url, token).catch(err => -1));
         const speeds = await Promise.all(promises);
         let bestI = 0;
         for (let i = 0; i < speeds.length; i++) {
@@ -555,7 +573,7 @@ class AixUpdaterClient {
             }
         }
         // console.log(speeds);
-        return urlList[bestI];
+        return speeds[bestI] > 0 ? urlList[bestI] : null;
     }
 
     /**
@@ -575,99 +593,117 @@ class AixUpdaterClient {
             fullDownloadUrl = [fullDownloadUrl];
         }
 
-        patchUrl = await this.selectBestMirror(patchUrl);
-
         progressListener = progressListener || (() => {});
         beforeUpdate = beforeUpdate || (async() => {});
         token = token || new AiXCancellationToken();
-        progressListener(new UpdateProgress(UpdateStatus.SIMPLE_READ_LOCAL_VERSION, nSimpleStatus));
-        const localVersion = await AixUpdaterClient.getCurrentLocalVersion(localPath);
         const checkCancelled = function() {
             if (token.cancelled) {
                 throw new Error("cancelled");
             }
         };
-        checkCancelled();
 
-        progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_PATCH, nSimpleStatus));
-        const filename = patchUrl.substr(patchUrl.lastIndexOf("/") + 1);
-        try {
-            /** @type {FileProgress} */
-            const downloadStatus = {
-                name: filename,
-                percent: 0,
-                total: 0,
-                transferred: 0,
-            };
-            await downloadTo(patchUrl, localPath, filename, (progress) => {
-                Object.assign(downloadStatus, progress);
+        patchUrl = await this.selectBestMirror(patchUrl, token);
+        const localVersion = await AixUpdaterClient.getCurrentLocalVersion(localPath).catch(() => "0.0.0");
+        if (patchUrl) {
+            progressListener(new UpdateProgress(UpdateStatus.SIMPLE_READ_LOCAL_VERSION, nSimpleStatus));
+            checkCancelled();
+
+            progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_PATCH, nSimpleStatus));
+            const filename = patchUrl.substr(patchUrl.lastIndexOf("/") + 1);
+            try {
+                /** @type {FileProgress} */
+                const downloadStatus = {
+                    name: filename,
+                    percent: 0,
+                    total: 0,
+                    transferred: 0,
+                };
+                await downloadTo(patchUrl, localPath, filename, (progress) => {
+                    Object.assign(downloadStatus, progress);
+                    progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_PATCH, nStatus, {
+                        totalFiles: 1,
+                        filesDownloaded: 0,
+                        downloadProgresses: [downloadStatus]
+                    }));
+                }, token);
+                checkCancelled();
+                downloadStatus.transferred == downloadStatus.total;
+                downloadStatus.percent = 1;
                 progressListener(new UpdateProgress(UpdateStatus.SIMPLE_DOWNLOAD_PATCH, nStatus, {
                     totalFiles: 1,
                     filesDownloaded: 0,
                     downloadProgresses: [downloadStatus]
                 }));
-            }, token);
-            checkCancelled();
-            const patchFolder = path.join(localPath, "__" + filename + "__");
-            await decompress(path.join(localPath, filename), patchFolder);
+                const patchFolder = path.join(localPath, "__" + filename + "__");
+                await decompress(path.join(localPath, filename), patchFolder);
 
-            checkCancelled();
-            try {
-                const versionFileContent = await fs.readFile(path.join(patchFolder, ".update"), "utf-8");
-                const [expectedFromVersion, targetVersion] = versionFileContent.split("\t");
-                if (expectedFromVersion !== localVersion) {
-                    throw new Error(`Local version ${localVersion} does not match patch applicable version ${expectedFromVersion}`);
-                }
-                const manifestContent = await fs.readFile(path.join(patchFolder, ".manifest"), "utf-8");
-                const fileList = parseManifest(manifestContent);
-                const patches = [];
-                for (const fileInfo of fileList) {
-                    checkCancelled();
-                    const digest = await calcDigest(path.join(localPath, fileInfo.path));
-                    if (digest !== fileInfo.digest) {
-                        let patchPath = path.join(patchFolder, digest + "_" + fileInfo.digest + ".xpatch");
+                checkCancelled();
+                try {
+                    const versionFileContent = await fs.readFile(path.join(patchFolder, ".update"), "utf-8");
+                    const [expectedFromVersion, targetVersion] = versionFileContent.split("\t");
+                    if (expectedFromVersion !== localVersion) {
+                        throw new Error(`Local version ${localVersion} does not match patch applicable version ${expectedFromVersion}`);
+                    }
+                    const manifestContent = await fs.readFile(path.join(patchFolder, ".manifest"), "utf-8");
+                    const fileList = parseManifest(manifestContent);
+                    const patches = [];
+                    for (const fileInfo of fileList) {
+                        checkCancelled();
+                        let patchPath = path.join(patchFolder, fileInfo.path);
                         try {
                             await fs.stat(patchPath);
+                            patches.push({
+                                file: path.join(localPath, fileInfo.path),
+                                patchFile: patchPath,
+                                oldDigest: "",
+                                newDigest: fileInfo.digest,
+                            });
                         } catch (error) {
-                            patchPath = path.join(patchFolder, fileInfo.path);
+                            if (hasNative) {
+                                const digest = await calcDigest(path.join(localPath, fileInfo.path));
+                                if (digest !== fileInfo.digest) {
+                                    patchPath = path.join(patchFolder, digest + "_" + fileInfo.digest + ".xpatch");
+                                    patches.push({
+                                        file: path.join(localPath, fileInfo.path),
+                                        patchFile: patchPath,
+                                        oldDigest: digest,
+                                        newDigest: fileInfo.digest,
+                                    });
+                                }
+                            }
                         }
-                        patches.push({
-                            file: path.join(localPath, fileInfo.path),
-                            patchFile: patchPath,
-                            oldDigest: digest,
-                            newDigest: fileInfo.digest,
-                        });
                     }
-                }
-                checkCancelled();
-
-                try {
-                    await beforeUpdate();
                     checkCancelled();
-                    progressListener(new UpdateProgress(UpdateStatus.PATCH_FILE, nSimpleStatus));
-                    await applyAllPatches(patches, false, true, (digest) => {
+
+                    try {
+                        await beforeUpdate();
                         checkCancelled();
-                        return path.join(localPath, digest) + ".tmp";
-                    });
-                    return targetVersion;
-                } finally {
-                    for (const fname of await fs.readdir(localPath)) {
-                        if (fname.endsWith(".tmp")) {
-                            await fs.remove(path.join(localPath, fname));
+                        progressListener(new UpdateProgress(UpdateStatus.SIMPLE_PATCH_FILE, nSimpleStatus));
+                        await applyAllPatches(patches, false, true, (digest) => {
+                            checkCancelled();
+                            return path.join(localPath, digest) + ".tmp";
+                        }, token);
+                        return targetVersion;
+                    } finally {
+                        for (const fname of await fs.readdir(localPath)) {
+                            if (fname.endsWith(".tmp")) {
+                                await fs.remove(path.join(localPath, fname));
+                            }
                         }
                     }
+                } finally {
+                    await fs.remove(patchFolder);
                 }
+            } catch (e) {
+                // ignore
+                console.error(e);
             } finally {
-                await fs.remove(patchFolder);
+                await fs.remove(path.join(localPath, filename));
             }
-        } catch (e) {
-            // ignore
-            console.error(e);
-        } finally {
-            await fs.remove(path.join(localPath, filename));
         }
+
         checkCancelled();
-        fullDownloadUrl = await this.selectBestMirror(fullDownloadUrl);
+        fullDownloadUrl = await this.selectBestMirror(fullDownloadUrl, token);
         const fullFileName = fullDownloadUrl.substring(fullDownloadUrl.lastIndexOf("/") + 1);
         /** @type {FileProgress} */
         const downloadStatus = {
