@@ -326,7 +326,10 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
             patch_folder = os.path.join(new_dir, "..", "__patches_{}_{}__".format(prev_version, version))
             shutil.rmtree(patch_folder, ignore_errors=True)
             os.mkdir(patch_folder)
+            shutil.rmtree(patch_folder + "full", ignore_errors=True)
+            os.mkdir(patch_folder + "full")
             upload(os.path.join(patch_folder, ".update"), prev_version + "\t" + version)
+            upload(os.path.join(patch_folder + "full", ".update"), prev_version + "\t" + version)
         for is_new, new_path, new_digest, new_target_rel_path in files:
             if not is_new:
                 continue
@@ -339,8 +342,8 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
                     # 上传 > https://files.aixcoder.com/update/localserver/patch/FFEEDDCCBBAA_AABBCCDDEEFF
                     upload("update/{}/patch/{}".format(artifact, patch_filename), patch_path)
                     if last_version:
-                        upload(patch_folder + "full", new_target_rel_path)
                         upload(patch_folder, patch_path)
+                        upload(os.path.join(patch_folder + "full", os.path.relpath(os.path.dirname(new_target_rel_path), "files"), os.path.basename(new_target_rel_path)[:-len(new_digest)]), os.path.join(storage.storage_dir, new_target_rel_path))
                         patched.add(new_target_rel_path)
 
     # 上传新的文件到 > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/files/AABBCCDDEEFF
@@ -351,6 +354,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
             patch_path = os.path.join(storage.storage_dir, new_target_rel_path)
             upload(oss_target_path, patch_path)
             if patch_folder is not None and new_target_rel_path not in patched:
+                upload(patch_folder + "full", patch_path)
                 upload(patch_folder, patch_path)
 
     # 更新最新版本号对应的manifest > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/manifest/0.0.3
@@ -362,6 +366,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
     print("Uploading file list => {}\n=========\n{}\n===END===\n".format(manifest_oss_target_path, manifest_lines_content))
     upload(manifest_oss_target_path, manifest_lines_content)
     if patch_folder is not None:
+        upload(os.path.join(patch_folder + "full", ".manifest"), manifest_lines_content)
         upload(os.path.join(patch_folder, ".manifest"), manifest_lines_content)
     # 更新最新版本号 > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/latest "0.0.3"
 

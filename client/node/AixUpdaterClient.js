@@ -585,7 +585,7 @@ class AixUpdaterClient {
                         try {
                             await fs.stat(patchPath);
                         } catch (error) {
-                            patchPath = path.join(patchFolder, fileInfo.digest + ".xpatch");
+                            patchPath = path.join(patchFolder, fileInfo.path);
                         }
                         patches.push({
                             file: path.join(localPath, fileInfo.path),
