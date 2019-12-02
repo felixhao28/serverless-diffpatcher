@@ -378,7 +378,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
     if not dry:
         storage.save()
     if patch_folder is not None:
-        zipformat = "gztar" if os.uname() == "Linux" else "zip"
+        zipformat = "gztar" if os.uname().sysname == "Linux" else "zip"
         shutil.make_archive(os.path.join(new_dir, "..", "patch_{}_{}".format(prev_version, version)), zipformat, patch_folder)
         shutil.rmtree(patch_folder)
         shutil.make_archive(os.path.join(new_dir, "..", "patch_{}_{}_full".format(prev_version, version)), zipformat, patch_folder + "full")
