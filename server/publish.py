@@ -343,7 +343,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
                     upload("update/{}/patch/{}".format(artifact, patch_filename), patch_path)
                     if last_version:
                         upload(patch_folder, patch_path)
-                        upload(os.path.join(patch_folder + "full", os.path.relpath(os.path.dirname(new_target_rel_path), "files"), os.path.basename(new_target_rel_path)[:-len(new_digest)]), os.path.join(storage.storage_dir, new_target_rel_path))
+                        upload(os.path.join(patch_folder + "full", os.path.relpath(os.path.dirname(new_target_rel_path), "files"), os.path.basename(new_target_rel_path)[:-len(new_digest) - 1]), os.path.join(storage.storage_dir, new_target_rel_path))
                         patched.add(new_target_rel_path)
 
     # 上传新的文件到 > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/files/AABBCCDDEEFF
@@ -354,7 +354,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
             patch_path = os.path.join(storage.storage_dir, new_target_rel_path)
             upload(oss_target_path, patch_path)
             if patch_folder is not None and new_target_rel_path not in patched:
-                upload(os.path.join(patch_folder + "full", os.path.relpath(os.path.dirname(new_target_rel_path), "files"), os.path.basename(new_target_rel_path)[:-len(new_digest)]), patch_path)
+                upload(os.path.join(patch_folder + "full", os.path.relpath(os.path.dirname(new_target_rel_path), "files"), os.path.basename(new_target_rel_path)[:-len(new_digest) - 1]), patch_path)
                 upload(patch_folder, patch_path)
 
     # 更新最新版本号对应的manifest > http://aixcoderbucket.oss-cn-beijing.aliyuncs.com/update/localserver/manifest/0.0.3
@@ -377,11 +377,22 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
     upload("update/{}/latest".format(artifact), version)
     if not dry:
         storage.save()
-    if patch_folder is not None:
+    
+    def make_archive(target_file, source_folder):
         zipformat = "gztar" if os.uname().sysname == "Linux" else "zip"
-        shutil.make_archive(os.path.join(new_dir, "..", "patch_{}_{}".format(prev_version, version)), zipformat, patch_folder)
+        if zipformat == "gztar":
+            target_file = os.path.abspath(target_file)
+            cwd = os.getcwd()
+            os.chdir(source_folder)
+            os.system("tar -czvf {} * .[^.]*".format(target_file + ".tar.gz"))
+            os.chdir(cwd)
+        else:
+            shutil.make_archive(target_file, zipformat, source_folder)
+
+    if patch_folder is not None:
+        make_archive(os.path.join(new_dir, "..", "patch_{}_{}".format(prev_version, version)), patch_folder)
         shutil.rmtree(patch_folder)
-        shutil.make_archive(os.path.join(new_dir, "..", "patch_{}_{}_full".format(prev_version, version)), zipformat, patch_folder + "full")
+        make_archive(os.path.join(new_dir, "..", "patch_{}_{}_full".format(prev_version, version)), patch_folder + "full")
         shutil.rmtree(patch_folder + "full")
 
 
