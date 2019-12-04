@@ -10,6 +10,7 @@ import bsdiff4
 import fnmatch
 from past.builtins import raw_input
 import glob
+import platform
 
 if sys.version_info >= (3, 5):
     from typing import List, Tuple
@@ -379,7 +380,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
         storage.save()
     
     def make_archive(target_file, source_folder):
-        zipformat = "gztar" if os.uname().sysname == "Linux" else "zip"
+        zipformat = "gztar" if platform.uname().sysname == "Linux" else "zip"
         if zipformat == "gztar":
             target_file = os.path.abspath(target_file)
             cwd = os.getcwd()
