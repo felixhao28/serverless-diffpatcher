@@ -14,7 +14,10 @@ import platform
 
 if sys.version_info >= (3, 5):
     from typing import List, Tuple
-
+if sys.version_info >= (3, 0):
+    isLinux = platform.uname().system == "Linux"
+else:
+    isLinux = platform.uname()[0] == "Linux"
 
 def mkdir_p(path):
     try:
@@ -380,7 +383,7 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
         storage.save()
     
     def make_archive(target_file, source_folder):
-        zipformat = "gztar" if platform.uname().sysname == "Linux" else "zip"
+        zipformat = "gztar" if isLinux else "zip"
         if zipformat == "gztar":
             target_file = os.path.abspath(target_file)
             cwd = os.getcwd()
