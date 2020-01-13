@@ -34,7 +34,7 @@ Download `publish.py`. Then install pip dependencies.
 
 `source_folder`: the path to the new version of the resource. It must be a folder.
 
-`version`: (Optional) a [semantic version](https://semver.org/) for the new version. It must be the same with the `.version` file in `source_folder`. If the `.version` files does not exist, it will be created. If the argument is ignored, the value from `.version` file will be used. For each update, `version` must be greater than the previous version.
+`version`: (Optional) a [semantic version](https://semver.org/) for the new version. It must be the same with the `version` file in `source_folder`. If the `version` files does not exist, it will be created. If the argument is ignored, the value from `version` file will be used. For each update, `version` must be greater than the previous version.
 
 Example:
 

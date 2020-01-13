@@ -32,21 +32,21 @@ def mkdir_p(path):
 def get_version(version, new_dir):
     if version is not None and not re.fullmatch(r'\d+(\.\d+)*', version):
         print("Version {} is not in <number>[.<number>[.<number>]] format")
-    version_file = os.path.join(new_dir, ".version")
+    version_file = os.path.join(new_dir, "version")
     if os.path.exists(version_file):
         with open(version_file, 'r', encoding='utf-8') as f:
             version_file_version = f.read().strip()
             if version is not None:
                 if version_file_version != version:
-                    print(os.path.realpath(new_dir) + "/.version and <version> does not match!")
+                    print(os.path.realpath(new_dir) + "/version and <version> does not match!")
                     sys.exit(-1)
             else:
                 version = version_file_version
     else:
         if version is None:
-            print("Neither " + os.path.realpath(new_dir) + "/.version or <version> argument is provided!")
+            print("Neither " + os.path.realpath(new_dir) + "/version or <version> argument is provided!")
             sys.exit(-1)
-        print(".version file does not exist, generating...")
+        print("version file does not exist, generating...")
         with open(version_file, 'w', encoding='utf-8') as f:
             f.write(version)
     print("Version {} detected.".format(version))

@@ -109,7 +109,7 @@ declare class AixUpdaterClient {
     constructor(options: AixUpdaterClient.AixUpdaterOptions);
 
     /**
-     * Reads the current version of `localPath` by reading .version file
+     * Reads the current version of `localPath` by reading version file
      * 
      * @param localPath the path to the local directory containing the need-to-update artifact.
      * 
