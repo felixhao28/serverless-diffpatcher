@@ -89,7 +89,7 @@ def query_yes_no(question, default="yes"):
 class Storage:
     def __init__(self, artifact, storage_dir, storage_registry_file):
         self.artifact = artifact
-        self.storage_dir = os.path.realpath(storage_dir)
+        self.storage_dir = storage_dir
         self.storage_registry_file = storage_registry_file
         self.storage_registry = None
 
@@ -150,7 +150,7 @@ class Storage:
         friendly_path = os.path.relpath(path, base_dir)
         if friendly_path not in storage_registry["files"]:
             storage_registry["files"][friendly_path] = {}
-        original_dir = os.path.realpath(os.path.dirname(path))
+        original_dir = os.path.dirname(path)
         file_name = os.path.basename(path)
         rel_original_dir = os.path.relpath(original_dir, base_dir)
         mkdir_p(os.path.join(self.storage_dir, "files", rel_original_dir))
