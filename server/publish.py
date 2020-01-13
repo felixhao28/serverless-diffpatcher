@@ -395,9 +395,15 @@ def main(artifact, new_dir, version, offline, dry, patch_only, remove, y, **kw_a
 
     if patch_folder is not None:
         make_archive(os.path.join(new_dir, "..", "patch_{}_{}".format(prev_version, version)), patch_folder)
-        shutil.rmtree(patch_folder)
+        try:
+            shutil.rmtree(patch_folder)
+        except FileNotFoundError:
+            os.system("rm -rf " + patch_folder)
         make_archive(os.path.join(new_dir, "..", "patch_{}_{}_full".format(prev_version, version)), patch_folder + "full")
-        shutil.rmtree(patch_folder + "full")
+        try:
+            shutil.rmtree(patch_folder + "full")
+        except FileNotFoundError:
+            os.system("rm -rf " + patch_folder + "full")
 
 
 if __name__ == '__main__':
