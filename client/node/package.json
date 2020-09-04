@@ -10,7 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "bsdiff-nodejs": "^2.1.0",
-    "decompress": "^4.2.0",
+    "decompress": "^4.2.1",
     "download": "^7.1.0",
     "fs-extra": "^8.1.0",
     "semver": "^6.3.0",
